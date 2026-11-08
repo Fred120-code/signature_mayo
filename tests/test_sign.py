@@ -13,6 +13,7 @@ from keys.expand_secret import decode_O, expand_secret_key
 from keys.keygen import compute_P3, encode_P3
 from keys.parameters import (
     K,
+    M,
     O_DIM,
     SALT_BYTES,
     SEED_PK_BYTES,
@@ -37,13 +38,15 @@ def test_sample_solution_solves_and_rejects_inconsistent_systems() -> None:
 
 
 def test_signature_uses_existing_encoding_and_length() -> None:
-    """Signing yields the established 464-byte vector-plus-salt format."""
+    """Signing yields the MAYO1 321-byte vector-plus-salt format."""
     seed_sk = bytes(range(SEED_SK_BYTES))
     expanded_secret = expand_secret_key(seed_sk)
     signature = sign(expanded_secret, "MAYO test message")
 
     assert isinstance(signature, bytes)
-    assert len(signature) == (V + O_DIM) * K // 2 + SALT_BYTES
+    expected_signature_bytes = (V + O_DIM) * K // 2 + SALT_BYTES
+    assert expected_signature_bytes == 321
+    assert len(signature) == expected_signature_bytes
 
 
 def test_sign_trace_is_complete_safe_and_does_not_change_signature(
@@ -65,7 +68,7 @@ def test_sign_trace_is_complete_safe_and_does_not_change_signature(
     signature_with_trace, trace = result_with_trace
 
     assert signature_with_trace == signature_without_trace
-    assert len(signature_with_trace) == (V + O_DIM) * K // 2 + SALT_BYTES
+    assert len(signature_with_trace) == 321
 
     seed_pk, encoded_o = derive_key_material(
         seed_sk,
@@ -117,16 +120,16 @@ def test_sign_trace_is_complete_safe_and_does_not_change_signature(
     assert trace.steps[-1].status == "completed"
 
     intermediate_step = trace.steps[6]
-    assert intermediate_step.data["W_vector_count"] == 800
+    assert intermediate_step.data["W_vector_count"] == K * M
     assert "W_matrix_count" not in intermediate_step.data
-    assert intermediate_step.dimensions["W"] == (10, 80, 80)
+    assert intermediate_step.dimensions["W"] == (K, M, V)
 
     trace_dict = trace.to_dict()
     serialized_trace = json.dumps(trace_dict)
     assert isinstance(json.loads(serialized_trace), dict)
     assert seed_sk.hex() not in serialized_trace
     assert expanded_secret.hex() not in serialized_trace
-    assert trace_dict["steps"][6]["dimensions"]["W"] == [10, 80, 80]
+    assert trace_dict["steps"][6]["dimensions"]["W"] == [K, M, V]
     assert trace_dict["steps"][6]["scope"] == "attempt"
     assert trace_dict["steps"][6]["attempt"] == 1
 
@@ -210,7 +213,7 @@ def test_sign_trace_records_inconsistent_attempt(
     assert solution_steps[1].scope == "attempt"
     assert solution_steps[1].attempt == 2
     assert solution_steps[1].data["attempt"] == 2
-    assert len(signature) == (V + O_DIM) * K // 2 + SALT_BYTES
+    assert len(signature) == 321
 
 
 def test_sign_rejects_malformed_secret_key() -> None:

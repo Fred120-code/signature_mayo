@@ -7,11 +7,10 @@ interface pédagogique ultérieure.
 
 > **Important :** ce projet n'est ni une implémentation certifiée ni une
 > affirmation de conformité à la spécification officielle MAYO Round 3. Les
-> paramètres et les encodages de l'implémentation d'origine ont été préservés.
-> Des points restent à confirmer par comparaison à des vecteurs officiels,
-> notamment la valeur `F_TAIL = [8, 1, 1, 0]` et les conventions de compteur
-> utilisées pour l'expansion AES. Ne l'utilisez pas pour protéger des données
-> réelles.
+> paramètres MAYO1 Round 3 sont configurés, mais les encodages doivent encore
+> être comparés à des vecteurs officiels, notamment la valeur
+> `F_TAIL = [8, 1, 1, 0]` et les conventions de compteur utilisées pour
+> l'expansion AES. Ne l'utilisez pas pour protéger des données réelles.
 
 ## Architecture
 
@@ -116,7 +115,7 @@ conserve la trace partielle dans `error.trace`.
 
 Une exécution a généré une nouvelle paire de clés, signé le message
 `"Bonjour MAYO1"` avec `return_trace=True`, puis vérifié la signature. Résultat
-observé : **464 octets**, vérification **`0`** (valide), et **10 étapes**.
+observé : **321 octets**, vérification **`0`** (valide), et **10 étapes**.
 Les clés n’ont pas été affichées. Le sel est une composante publique de la
 signature, mais son hexadécimal est masqué dans ce rapport par prudence. Les
 aléas et coefficients secrets ou dérivés de secrets ne sont pas inclus dans la
@@ -134,14 +133,14 @@ La trace complète expurgée de cette exécution est :
       "scope": "signature",
       "description": "La clé étendue a été analysée en mémoire; ses éléments secrets ne sont pas copiés dans la trace.",
       "data": {
-        "expanded_key_bytes": 155544,
-        "polynomial_count": 80,
-        "linking_matrix_count": 80
+        "expanded_key_bytes": 69856,
+        "polynomial_count": 64,
+        "linking_matrix_count": 64
       },
       "dimensions": {
-        "O": [80, 8],
-        "P1": [80, 80, 80],
-        "L": [80, 80, 8]
+        "O": [58, 8],
+        "P1": [64, 58, 58],
+        "L": [64, 58, 8]
       },
       "status": "completed"
     },
@@ -179,12 +178,12 @@ La trace complète expurgée de cette exécution est :
       "scope": "signature",
       "description": "Le vecteur cible t et la matrice Lambda sont dérivés du digest et du sel.",
       "data": {
-        "t_preview": [14, 12, 14, 13, 13, 3, 10, 1],
-        "lambda_preview": [[3, 9, 13, 11], [0, 2, 12, 6]]
+        "t_preview": [5, 3, 12, 14, 3, 1, 10, 12],
+        "lambda_preview": [[15, 10, 5, 0], [12, 2, 13, 3]]
       },
       "dimensions": {
-        "t": [80],
-        "Lambda": [80, 88]
+        "t": [64],
+        "Lambda": [64, 66]
       },
       "status": "completed"
     },
@@ -195,11 +194,11 @@ La trace complète expurgée de cette exécution est :
       "scope": "signature",
       "description": "La table des matrices E est récupérée pour combiner les blocs du système.",
       "data": {
-        "block_count": 10
+        "block_count": 9
       },
       "dimensions": {
-        "E_table": [10, 10],
-        "E_entry": [80, 80]
+        "E_table": [9, 9],
+        "E_entry": [64, 64]
       },
       "status": "completed"
     },
@@ -212,13 +211,13 @@ La trace complète expurgée de cette exécution est :
       "data": {
         "attempt": 1,
         "counter": 0,
-        "random_output_bytes": 440,
-        "vinegar_block_count": 10,
-        "random_vector_elements": 80
+        "random_output_bytes": 297,
+        "vinegar_block_count": 9,
+        "random_vector_elements": 72
       },
       "dimensions": {
-        "vinegar_blocks": [10, 80],
-        "r": [80]
+        "vinegar_blocks": [9, 58],
+        "r": [72]
       },
       "status": "completed"
     },
@@ -229,13 +228,13 @@ La trace complète expurgée de cette exécution est :
       "scope": "attempt",
       "description": "Les matrices intermédiaires liées aux blocs vinegar et les produits W sont construits; leurs coefficients sensibles sont omis.",
       "data": {
-        "M_matrix_count": 10,
-        "W_vector_count": 800,
+        "M_matrix_count": 9,
+        "W_vector_count": 576,
         "coefficients_recorded": false
       },
       "dimensions": {
-        "M_matrices": [10, 80, 8],
-        "W": [10, 80, 80]
+        "M_matrices": [9, 64, 8],
+        "W": [9, 64, 58]
       },
       "status": "completed"
     },
@@ -246,14 +245,14 @@ La trace complète expurgée de cette exécution est :
       "scope": "attempt",
       "description": "Les contributions des blocs sont accumulées pour former A x = y; les coefficients ne sont pas exposés.",
       "data": {
-        "matrix_coefficients": 6400,
-        "target_elements": 80,
+        "matrix_coefficients": 4608,
+        "target_elements": 64,
         "coefficients_recorded": false
       },
       "dimensions": {
-        "A": [80, 80],
-        "y": [80],
-        "r": [80]
+        "A": [64, 72],
+        "y": [64],
+        "r": [72]
       },
       "status": "completed"
     },
@@ -269,7 +268,7 @@ La trace complète expurgée de cette exécution est :
         "reason": "solution_found"
       },
       "dimensions": {
-        "solution": [80]
+        "solution": [72]
       },
       "status": "solved"
     },
@@ -280,14 +279,14 @@ La trace complète expurgée de cette exécution est :
       "scope": "signature",
       "description": "Les blocs de signature sont assemblés, encodés puis concaténés au sel.",
       "data": {
-        "vector_elements": 880,
-        "encoded_vector_bytes": 440,
+        "vector_elements": 594,
+        "encoded_vector_bytes": 297,
         "salt_bytes": 24,
-        "signature_bytes": 464
+        "signature_bytes": 321
       },
       "dimensions": {
-        "signature_blocks": [10, 88],
-        "signature_vector": [880]
+        "signature_blocks": [9, 66],
+        "signature_vector": [594]
       },
       "status": "completed"
     }
@@ -342,7 +341,10 @@ toute persistance ou transmission.
 
 ## Paramètres et encodages conservés
 
-Les paramètres actuellement utilisés incluent `Q=16`, `N=88`, `M=80`,
-`O_DIM=8`, `K=10`, des graines de 24 et 16 octets, et une signature de
-464 octets. Les tailles et formats sont ceux de l'implémentation préexistante;
-leur présence ici ne constitue pas une attestation de conformité normative.
+Les paramètres MAYO1 Round 3 configurés sont `Q=16`, `N=66`, `M=64`,
+`O_DIM=8`, `K=9` et `V=58`, avec des graines secrète/publique de 24/16 octets,
+un digest de 32 octets et un sel de 24 octets. Les tailles dérivées sont :
+clé publique compacte **1168 octets**, clé secrète compacte **24 octets**, clé
+publique étendue **70752 octets**, clé secrète étendue **69856 octets** et
+signature **321 octets**. Ces valeurs ne constituent pas une attestation de
+conformité normative.

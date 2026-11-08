@@ -26,8 +26,7 @@ def check_parameters() -> None:
         AssertionError: If any configured parameter relationship is invalid.
     """
     assert Q == 16
-    assert V == 80
-    assert V >= M
+    assert V == N - O_DIM
     assert K * O_DIM >= M
 
     print("Parametres MAYO1 valides !")

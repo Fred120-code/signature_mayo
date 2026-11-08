@@ -7,11 +7,13 @@ from keys.expand_public import generate_P1_P2
 from keys.expand_secret import decode_O
 from keys.keygen import compute_P3, generate_keypair
 from keys.parameters import (
+    DIGEST_BYTES,
     K,
     M,
     N,
     O_DIM,
     Q,
+    SALT_BYTES,
     SEED_PK_BYTES,
     SEED_SK_BYTES,
     V,
@@ -39,9 +41,18 @@ def generated_material() -> tuple[list[list[int]], list, list, list]:
 
 
 def test_parameters_and_seed_lengths() -> None:
-    """The configured dimensions and random seed lengths are unchanged."""
+    """MAYO1 parameters and their dimension relationships are configured."""
     check_parameters()
-    assert (Q, N, M, O_DIM, K, V) == (16, 88, 80, 8, 10, 80)
+    assert (Q, N, M, O_DIM, K, V) == (16, 66, 64, 8, 9, 58)
+    assert V == N - O_DIM
+    assert N == V + O_DIM
+    assert K * O_DIM >= M
+    assert (SEED_SK_BYTES, SEED_PK_BYTES, DIGEST_BYTES, SALT_BYTES) == (
+        24,
+        16,
+        32,
+        24,
+    )
     assert len(random_bytes(SEED_SK_BYTES)) == SEED_SK_BYTES
     assert len(random_bytes(SEED_PK_BYTES)) == SEED_PK_BYTES
 
@@ -119,10 +130,10 @@ def test_p3_trapdoor_property(
 
 
 def test_generate_keypair_sizes() -> None:
-    """Key generation retains the existing compact key lengths."""
+    """Key generation yields MAYO1 compact public and secret key lengths."""
     cpk, csk = generate_keypair()
-    assert len(cpk) == 1456
-    assert len(csk) == SEED_SK_BYTES
+    assert len(cpk) == 1168
+    assert len(csk) == 24
 
 
 def test_compute_p3_rejects_wrong_matrix_count() -> None:

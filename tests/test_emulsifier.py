@@ -1,6 +1,7 @@
 """Tests for MAYO polynomial indices and emulsifier matrices."""
 
 from core.matrix import matrix_multiply
+from keys.parameters import K, M
 from scheme.emulsifier import (
     F_TAIL,
     build_E,
@@ -11,14 +12,13 @@ from scheme.emulsifier import (
 
 def test_ell_indices_cover_all_pairs_without_duplicates() -> None:
     """Every upper-triangular pair maps to exactly one consecutive index."""
-    k = 10
     indices = [
-        ell_index(i, j, k)
-        for i in range(k)
-        for j in range(i, k)
+        ell_index(i, j, K)
+        for i in range(K)
+        for j in range(i, K)
     ]
-    assert sorted(indices) == list(range(k * (k + 1) // 2))
-    assert ell_index(0, k - 1, k) == 0
+    assert sorted(indices) == list(range(K * (K + 1) // 2))
+    assert ell_index(0, K - 1, K) == 0
 
 
 def test_power_matrices_follow_the_existing_polynomial_reduction() -> None:
@@ -34,12 +34,16 @@ def test_power_matrices_follow_the_existing_polynomial_reduction() -> None:
 
 def test_build_e_is_symmetric_and_has_expected_dimensions() -> None:
     """The emulsifier table has symmetric entries of the configured size."""
-    table = build_E(80, 10)
-    assert len(table) == 10
-    assert all(len(row) == 10 for row in table)
-    assert all(table[i][j] == table[j][i] for i in range(10) for j in range(10))
+    table = build_E(M, K)
+    assert len(table) == K
+    assert all(len(row) == K for row in table)
     assert all(
-        len(table[i][j]) == 80 and len(table[i][j][0]) == 80
-        for i in range(10)
-        for j in range(10)
+        table[i][j] == table[j][i]
+        for i in range(K)
+        for j in range(K)
+    )
+    assert all(
+        len(table[i][j]) == M and len(table[i][j][0]) == M
+        for i in range(K)
+        for j in range(K)
     )
