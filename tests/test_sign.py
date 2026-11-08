@@ -1,5 +1,7 @@
 """Tests for sample-solution and signature generation."""
 
+import json
+
 import pytest
 
 import scheme.sign as sign_module
@@ -103,8 +105,30 @@ def test_sign_trace_is_complete_safe_and_does_not_change_signature(
     assert [step.number for step in trace.steps] == list(
         range(1, len(trace.steps) + 1)
     )
+    assert all(
+        step.scope == "signature" and step.attempt is None
+        for step in trace.steps[:5] + trace.steps[-1:]
+    )
+    assert all(
+        step.scope == "attempt" and step.attempt == 1
+        for step in trace.steps[5:-1]
+    )
     assert trace.steps[-2].status == "solved"
     assert trace.steps[-1].status == "completed"
+
+    intermediate_step = trace.steps[6]
+    assert intermediate_step.data["W_vector_count"] == 800
+    assert "W_matrix_count" not in intermediate_step.data
+    assert intermediate_step.dimensions["W"] == (10, 80, 80)
+
+    trace_dict = trace.to_dict()
+    serialized_trace = json.dumps(trace_dict)
+    assert isinstance(json.loads(serialized_trace), dict)
+    assert seed_sk.hex() not in serialized_trace
+    assert expanded_secret.hex() not in serialized_trace
+    assert trace_dict["steps"][6]["dimensions"]["W"] == [10, 80, 80]
+    assert trace_dict["steps"][6]["scope"] == "attempt"
+    assert trace_dict["steps"][6]["attempt"] == 1
 
     trace_text = repr(trace)
     assert seed_sk.hex() not in trace_text
@@ -149,10 +173,42 @@ def test_sign_trace_records_inconsistent_attempt(
         step for step in trace.steps if step.name == "sample_solution"
     ]
     assert len(solution_steps) == 2
+    attempt_steps = [
+        step
+        for step in trace.steps
+        if step.scope == "attempt"
+    ]
+    attempt_step_names = [
+        "attempt_values_generated",
+        "intermediate_matrices_built",
+        "linear_system_built",
+        "sample_solution",
+    ]
+    assert [step.name for step in attempt_steps] == attempt_step_names * 2
+    assert [step.attempt for step in attempt_steps] == [1] * 4 + [2] * 4
+    assert [step.number for step in trace.steps] == list(
+        range(1, len(trace.steps) + 1)
+    )
+    assert all(
+        step.scope == "signature" and step.attempt is None
+        for step in trace.steps
+        if step.name in {
+            "secret_key_prepared",
+            "message_digest",
+            "salt_generated",
+            "target_and_lambda_derived",
+            "emulsifier_loaded",
+            "signature_encoded",
+        }
+    )
     assert solution_steps[0].status == "inconsistent"
+    assert solution_steps[0].scope == "attempt"
+    assert solution_steps[0].attempt == 1
     assert solution_steps[0].data["reason"] == "system_inconsistent"
     assert solution_steps[0].data["attempt"] == 1
     assert solution_steps[1].status == "solved"
+    assert solution_steps[1].scope == "attempt"
+    assert solution_steps[1].attempt == 2
     assert solution_steps[1].data["attempt"] == 2
     assert len(signature) == (V + O_DIM) * K // 2 + SALT_BYTES
 

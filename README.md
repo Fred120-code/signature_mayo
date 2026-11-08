@@ -84,6 +84,10 @@ class TraceStep:
     data: TraceData = field(default_factory=dict)
     dimensions: Dimensions = field(default_factory=dict)
     status: str = "completed"
+    attempt: int | None = None
+
+    @property
+    def scope(self) -> str: ...
 ```
 
 Les alias de types sont :
@@ -98,11 +102,15 @@ Dimensions = dict[str, tuple[int, ...]]
 
 `SignTrace` est une dataclass mutable contenant `steps: list[TraceStep]`.
 Sa méthode `add_step(name, description, *, data=None, dimensions=None,
-status="completed")` ajoute une étape et lui attribue le prochain numéro,
-commençant à 1. `TraceStep` est immuable, mais ses dictionnaires `data` et
-`dimensions` restent des objets Python mutables. `SignTraceError`, utilisée
-pour une signature qui échoue lorsque le traçage est activé, est une sous-classe
-de `RuntimeError` qui conserve la trace partielle dans `error.trace`.
+status="completed", attempt=None)` ajoute une étape et lui attribue le prochain
+numéro, commençant à 1. Les numéros restent globaux et dans l'ordre
+d'exécution. `attempt` vaut `None` pour les étapes communes à la signature ou
+le numéro (à partir de 1) pour les étapes d'une tentative; la propriété
+calculée `scope` vaut respectivement `"signature"` ou `"attempt"`.
+`TraceStep` est immuable, mais ses dictionnaires `data` et `dimensions` restent
+des objets Python mutables. `SignTraceError`, utilisée pour une signature qui
+échoue lorsque le traçage est activé, est une sous-classe de `RuntimeError` qui
+conserve la trace partielle dans `error.trace`.
 
 ### Exemple réel exécuté
 
@@ -122,6 +130,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 1,
       "name": "secret_key_prepared",
+      "attempt": null,
+      "scope": "signature",
       "description": "La clé étendue a été analysée en mémoire; ses éléments secrets ne sont pas copiés dans la trace.",
       "data": {
         "expanded_key_bytes": 155544,
@@ -138,6 +148,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 2,
       "name": "message_digest",
+      "attempt": null,
+      "scope": "signature",
       "description": "SHAKE256 calcule le digest du message.",
       "data": {
         "digest_bytes": 32,
@@ -149,6 +161,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 3,
       "name": "salt_generated",
+      "attempt": null,
+      "scope": "signature",
       "description": "Le sel est dérivé du digest, d'un aléa éphémère et de la graine secrète; seuls le sel public et la taille de l'aléa sont tracés.",
       "data": {
         "salt_bytes": 24,
@@ -161,6 +175,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 4,
       "name": "target_and_lambda_derived",
+      "attempt": null,
+      "scope": "signature",
       "description": "Le vecteur cible t et la matrice Lambda sont dérivés du digest et du sel.",
       "data": {
         "t_preview": [14, 12, 14, 13, 13, 3, 10, 1],
@@ -175,6 +191,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 5,
       "name": "emulsifier_loaded",
+      "attempt": null,
+      "scope": "signature",
       "description": "La table des matrices E est récupérée pour combiner les blocs du système.",
       "data": {
         "block_count": 10
@@ -188,6 +206,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 6,
       "name": "attempt_values_generated",
+      "attempt": 1,
+      "scope": "attempt",
       "description": "SHAKE256 dérive les blocs vinegar et le vecteur aléatoire de la tentative; leurs coefficients ne sont pas enregistrés.",
       "data": {
         "attempt": 1,
@@ -205,10 +225,12 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 7,
       "name": "intermediate_matrices_built",
+      "attempt": 1,
+      "scope": "attempt",
       "description": "Les matrices intermédiaires liées aux blocs vinegar et les produits W sont construits; leurs coefficients sensibles sont omis.",
       "data": {
         "M_matrix_count": 10,
-        "W_matrix_count": 800,
+        "W_vector_count": 800,
         "coefficients_recorded": false
       },
       "dimensions": {
@@ -220,6 +242,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 8,
       "name": "linear_system_built",
+      "attempt": 1,
+      "scope": "attempt",
       "description": "Les contributions des blocs sont accumulées pour former A x = y; les coefficients ne sont pas exposés.",
       "data": {
         "matrix_coefficients": 6400,
@@ -236,6 +260,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 9,
       "name": "sample_solution",
+      "attempt": 1,
+      "scope": "attempt",
       "description": "SampleSolution cherche une solution en utilisant r pour les variables libres.",
       "data": {
         "attempt": 1,
@@ -250,6 +276,8 @@ La trace complète expurgée de cette exécution est :
     {
       "number": 10,
       "name": "signature_encoded",
+      "attempt": null,
+      "scope": "signature",
       "description": "Les blocs de signature sont assemblés, encodés puis concaténés au sel.",
       "data": {
         "vector_elements": 880,
@@ -296,20 +324,21 @@ variables locales de la fonction de signature.
 
 ### Sérialisation JSON
 
-`SignTrace` et `TraceStep` sont des dataclasses, mais ne sont pas directement
-sérialisables avec `json.dumps(trace)` : cet appel lève `TypeError`. Convertir
-d’abord la dataclass en types composés standard avec `dataclasses.asdict` :
+`SignTrace.to_dict()` convertit la trace dans son ordre global en dictionnaires,
+listes et valeurs scalaires compatibles JSON. Les dimensions, stockées sous
+forme de tuples dans les objets Python, sont converties en listes :
 
 ```python
 import json
-from dataclasses import asdict
 
-json_text = json.dumps(asdict(trace), ensure_ascii=False, indent=2)
+json_text = json.dumps(trace.to_dict(), ensure_ascii=False, indent=2)
 ```
 
-Cette conversion fonctionne pour la trace actuelle : les tuples de dimensions
-sont encodés comme des tableaux JSON. Il faut toutefois maintenir le filtrage
-des données sensibles avant toute persistance ou transmission de la trace.
+Le dictionnaire conserve le champ `attempt` et le `scope` calculé pour permettre
+de regrouper les événements par tentative sans perdre leur numéro ni leur ordre
+global. La sérialisation n'ajoute pas les valeurs cryptographiques omises de la
+trace. Il faut néanmoins maintenir le filtrage des données sensibles avant
+toute persistance ou transmission.
 
 ## Paramètres et encodages conservés
 

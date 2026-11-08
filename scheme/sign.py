@@ -203,6 +203,7 @@ def sign(
                     "vinegar_block_count": len(v_list),
                     "random_vector_elements": len(r),
                 },
+                attempt=ctr + 1,
                 dimensions={
                     "vinegar_blocks": (
                         len(v_list),
@@ -239,9 +240,10 @@ def sign(
                 "sont omis.",
                 data={
                     "M_matrix_count": len(M_matrices),
-                    "W_matrix_count": sum(len(block) for block in W),
+                    "W_vector_count": sum(len(block) for block in W),
                     "coefficients_recorded": False,
                 },
+                attempt=ctr + 1,
                 dimensions={
                     "M_matrices": (
                         len(M_matrices),
@@ -290,6 +292,7 @@ def sign(
                     "target_elements": len(y),
                     "coefficients_recorded": False,
                 },
+                attempt=ctr + 1,
                 dimensions={
                     "A": (len(A), len(A[0]) if A else 0),
                     "y": (len(y),),
@@ -312,6 +315,7 @@ def sign(
                         else "solution_found"
                     ),
                 },
+                attempt=ctr + 1,
                 dimensions={"solution": (len(x),) if x is not None else ()},
                 status="solved" if x is not None else "inconsistent",
             )
