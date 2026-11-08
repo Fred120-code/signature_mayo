@@ -3,13 +3,16 @@
 from core.field import add
 from core.matrix import Matrix, matrix_add, matrix_multiply, zero_matrix
 from crypto.aes import aes_ctr_expand
-from crypto.encoding import decode_nibbles, encode_nibbles
+from crypto.encoding import (
+    decode_matrices as decode_matrix_sequence,
+    decode_nibbles,
+    encode_matrices,
+)
 from crypto.hashing import derive_key_material
 from keys.expand_public import decode_P1, generate_P1_P2
 from keys.parameters import (
     M,
     O_DIM,
-    Q,
     SEED_SK_BYTES,
     SEED_PK_BYTES,
     V,
@@ -108,16 +111,7 @@ def encode_L(L: list[Matrix]) -> bytes:
     if len(L) != M:
         raise ValueError("Nombre incorrect de matrices L")
 
-    elements = []
-    for row in range(V):
-        for col in range(O_DIM):
-            for matrix_index in range(M):
-                value = L[matrix_index][row][col]
-                if not 0 <= value < Q:
-                    raise ValueError("Elément invalide dans F16")
-                elements.append(value)
-
-    return encode_nibbles(elements)
+    return encode_matrices(L, V, O_DIM)
 
 
 def decode_L(encoded_L: bytes) -> list[Matrix]:
@@ -132,20 +126,7 @@ def decode_L(encoded_L: bytes) -> list[Matrix]:
     Raises:
         ValueError: If the encoded length does not match the parameters.
     """
-    expected_elements = M * V * O_DIM
-    if len(encoded_L) * 2 != expected_elements:
-        raise ValueError("Taille incorrecte de encoded_L")
-
-    elements = decode_nibbles(encoded_L)
-    linking_matrices = [zero_matrix(V, O_DIM) for _ in range(M)]
-    position = 0
-    for row in range(V):
-        for col in range(O_DIM):
-            for matrix_index in range(M):
-                linking_matrices[matrix_index][row][col] = elements[position]
-                position += 1
-
-    return linking_matrices
+    return decode_matrix_sequence(encoded_L, M, V, O_DIM)
 
 
 def expand_secret_key(csk: bytes) -> bytes:

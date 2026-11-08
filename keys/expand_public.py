@@ -1,8 +1,8 @@
 """Public-key matrix decoding, expansion, and parsing."""
 
-from core.matrix import Matrix, zero_matrix
+from core.matrix import Matrix
 from crypto.aes import aes_ctr_expand
-from crypto.encoding import decode_nibbles
+from crypto.encoding import decode_matrices as decode_matrix_sequence
 from keys.parameters import M, O_DIM, SEED_PK_BYTES, V
 
 
@@ -12,10 +12,7 @@ def decode_matrices(
     cols: int,
     triangular: bool = False,
 ) -> list[Matrix]:
-    """Decode interleaved field elements into the configured matrices.
-
-    For each matrix coordinate, the encoded data contains one coefficient
-    from each polynomial matrix in order.
+    """Decode the configured matrix sequence with MAYO's matrix encoding.
 
     Args:
         data: Packed matrix coefficients.
@@ -29,29 +26,13 @@ def decode_matrices(
     Raises:
         ValueError: If the encoded byte length does not match the dimensions.
     """
-    elements = decode_nibbles(data)
-
-    if triangular:
-        elements_per_matrix = rows * (rows + 1) // 2
-    else:
-        elements_per_matrix = rows * cols
-
-    expected = M * elements_per_matrix
-    if len(data) != (expected + 1) // 2:
-        raise ValueError("Taille incorrecte des donnees")
-
-    matrices = [zero_matrix(rows, cols) for _ in range(M)]
-    position = 0
-
-    for i in range(rows):
-        for j in range(cols):
-            if triangular and j < i:
-                continue
-            for matrix_index in range(M):
-                matrices[matrix_index][i][j] = elements[position]
-                position += 1
-
-    return matrices
+    return decode_matrix_sequence(
+        data,
+        M,
+        rows,
+        cols,
+        triangular=triangular,
+    )
 
 
 def decode_P1(data: bytes) -> list[Matrix]:
@@ -149,14 +130,12 @@ def parse_epk(epk: bytes) -> tuple[list[Matrix], list[Matrix], list[Matrix]]:
 
     P1 = decode_P1(encoded_P1)
     P2 = decode_P2(encoded_P2)
-    elements_P3 = decode_nibbles(encoded_P3)
-    P3 = [zero_matrix(O_DIM, O_DIM) for _ in range(M)]
-
-    position = 0
-    for i in range(O_DIM):
-        for j in range(i, O_DIM):
-            for matrix_index in range(M):
-                P3[matrix_index][i][j] = elements_P3[position]
-                position += 1
+    P3 = decode_matrix_sequence(
+        encoded_P3,
+        M,
+        O_DIM,
+        O_DIM,
+        triangular=True,
+    )
 
     return P1, P2, P3
