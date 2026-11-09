@@ -90,3 +90,120 @@ def encode_vector(vector: list[int]) -> bytes:
         if not 0 <= value < FIELD_SIZE:
             raise ValueError("Élément invalide dans F16 pour l'encodage du vecteur")
     return encode_nibbles(vector)
+
+
+def _matrix_coordinates(
+    rows: int,
+    cols: int,
+    triangular: bool,
+) -> list[tuple[int, int]]:
+    if rows < 0 or cols < 0:
+        raise ValueError("Les dimensions des matrices ne peuvent pas etre negatives")
+    if triangular and rows != cols:
+        raise ValueError("Une matrice triangulaire doit être carree")
+
+    return [
+        (row, col)
+        for row in range(rows)
+        for col in range(cols)
+        if not triangular or row <= col
+    ]
+
+
+def encode_matrices(
+    matrices: list[list[list[int]]],
+    rows: int,
+    cols: int,
+    *,
+    triangular: bool = False,
+) -> bytes:
+    """Encode a sequence of matrices using MAYO's ``EncodeMatrices`` order.
+
+    For each matrix coordinate in row-major order, the corresponding values
+    from all matrices are encoded as one vector. Lower-triangular coordinates
+    are omitted when ``triangular`` is true.
+
+    Args:
+        matrices: Matrices in sequence order.
+        rows: Number of rows in each matrix.
+        cols: Number of columns in each matrix.
+        triangular: Whether to encode only upper-triangular coordinates.
+
+    Returns:
+        The nibble-sliced byte representation of the matrix sequence.
+
+    Raises:
+        ValueError: If dimensions, matrix shapes, or encoded field elements
+            are invalid.
+    """
+    coordinates = _matrix_coordinates(rows, cols, triangular)
+    if not matrices:
+        raise ValueError("La sequence de matrices ne peut pas etre vide")
+
+    for matrix in matrices:
+        if len(matrix) != rows or any(len(row) != cols for row in matrix):
+            raise ValueError("Dimensions incorrectes pour une matrice")
+
+    encoded = bytearray()
+    for row, col in coordinates:
+        encoded.extend(
+            encode_vector([matrix[row][col] for matrix in matrices])
+        )
+
+    return bytes(encoded)
+
+
+def decode_matrices(
+    data: bytes,
+    matrix_count: int,
+    rows: int,
+    cols: int,
+    *,
+    triangular: bool = False,
+) -> list[list[list[int]]]:
+    """Decode a MAYO ``EncodeMatrices`` byte string.
+
+    The encoded vector for each matrix coordinate occupies its own
+    ``ceil(matrix_count / 2)``-byte segment, including its own zero padding
+    nibble when ``matrix_count`` is odd.
+
+    Args:
+        data: Nibble-sliced matrix-sequence bytes.
+        matrix_count: Number of matrices in the sequence.
+        rows: Number of rows in each matrix.
+        cols: Number of columns in each matrix.
+        triangular: Whether only upper-triangular coordinates are encoded.
+
+    Returns:
+        The decoded matrices in sequence order. Omitted lower-triangular
+        coordinates are zero.
+
+    Raises:
+        ValueError: If the count, dimensions, or byte length is invalid.
+    """
+    if matrix_count <= 0:
+        raise ValueError("Le nombre de matrices doit etre positif")
+
+    coordinates = _matrix_coordinates(rows, cols, triangular)
+    bytes_per_coordinate = (matrix_count + 1) // 2
+    expected_length = len(coordinates) * bytes_per_coordinate
+    if len(data) != expected_length:
+        raise ValueError(
+            f"Taille incorrecte des donnees ({len(data)} != {expected_length})"
+        )
+
+    matrices = [
+        [[0] * cols for _ in range(rows)]
+        for _ in range(matrix_count)
+    ]
+    position = 0
+    for row, col in coordinates:
+        values = decode_vector(
+            matrix_count,
+            data[position:position + bytes_per_coordinate],
+        )
+        for matrix_index, value in enumerate(values):
+            matrices[matrix_index][row][col] = value
+        position += bytes_per_coordinate
+
+    return matrices

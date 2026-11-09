@@ -3,7 +3,7 @@
 import hashlib
 
 from crypto.aes import aes_ctr_expand_iv
-from crypto.encoding import decode_nibbles, decode_vector
+from crypto.encoding import decode_vector
 
 
 def shake256(data: bytes, output_length: int) -> bytes:
@@ -45,7 +45,7 @@ def derive_key_material(
     if len(seed_sk) != seed_sk_bytes:
         raise ValueError("Taille incorrecte de seed_sk")
 
-    oil_bytes = (vinegar_dim * oil_dim) // 2
+    oil_bytes = (vinegar_dim * oil_dim + 1) // 2
     output = shake256(seed_sk, seed_pk_bytes + oil_bytes)
     return output[:seed_pk_bytes], output[seed_pk_bytes:]
 
@@ -67,6 +67,11 @@ def derive_t_and_lambda(
     Returns:
         The target vector and a ``polynomial_count x variable_count`` matrix.
     """
+    if polynomial_count <= 0 or polynomial_count % 2:
+        raise ValueError("Le nombre de polynomes doit etre positif et pair")
+    if variable_count <= 0:
+        raise ValueError("Le nombre de variables doit etre positif")
+
     hash_input = m_digest + salt
     target_bytes_len = polynomial_count // 2 + 32
     hash_output = shake256(hash_input, target_bytes_len)
@@ -79,15 +84,28 @@ def derive_t_and_lambda(
         polynomial_count // 2 + 16 : polynomial_count // 2 + 32
     ]
 
+    lambda_bytes_len = (polynomial_count * variable_count + 1) // 2
     lambda_bytes = aes_ctr_expand_iv(
         aes_key,
         aes_iv,
-        (polynomial_count * variable_count) // 2,
+        lambda_bytes_len,
     )
-    lambda_flat = decode_nibbles(lambda_bytes)
+    column_bytes = polynomial_count // 2
+    lambda_columns = [
+        decode_vector(
+            polynomial_count,
+            lambda_bytes[
+                column * column_bytes:(column + 1) * column_bytes
+            ],
+        )
+        for column in range(variable_count)
+    ]
     lambda_matrix = [
-        lambda_flat[index * variable_count : (index + 1) * variable_count]
-        for index in range(polynomial_count)
+        [
+            lambda_columns[column][row]
+            for column in range(variable_count)
+        ]
+        for row in range(polynomial_count)
     ]
 
     return target, lambda_matrix

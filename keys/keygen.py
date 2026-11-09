@@ -2,7 +2,7 @@
 
 from core.matrix import Matrix, matrix_add, matrix_multiply, matrix_transpose
 from core.quadratic import upper_triangle
-from crypto.encoding import encode_nibbles
+from crypto.encoding import encode_matrices
 from crypto.hashing import derive_key_material
 from crypto.randomness import random_bytes
 from keys.expand_public import generate_P1_P2
@@ -10,7 +10,6 @@ from keys.expand_secret import decode_O
 from keys.parameters import (
     M,
     O_DIM,
-    Q,
     SEED_SK_BYTES,
     SEED_PK_BYTES,
     V,
@@ -63,16 +62,7 @@ def encode_P3(P3: list[Matrix]) -> bytes:
     if len(P3) != M:
         raise ValueError("Nombre incorrect de matrices P3")
 
-    elements = []
-    for row in range(O_DIM):
-        for col in range(row, O_DIM):
-            for matrix_index in range(M):
-                value = P3[matrix_index][row][col]
-                if not 0 <= value < Q:
-                    raise ValueError("Element invalide dans P3")
-                elements.append(value)
-
-    return encode_nibbles(elements)
+    return encode_matrices(P3, O_DIM, O_DIM, triangular=True)
 
 
 def generate_keypair() -> tuple[bytes, bytes]:

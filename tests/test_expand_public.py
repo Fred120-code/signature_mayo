@@ -2,6 +2,7 @@
 
 import pytest
 
+from crypto.encoding import encode_matrices
 from crypto.hashing import derive_key_material
 from keys.expand_public import (
     expand_public_key,
@@ -33,12 +34,18 @@ def test_expand_and_parse_public_key() -> None:
     epk = expand_public_key(cpk)
     P1, P2, P3 = parse_epk(epk)
 
-    assert len(cpk) == 1456
-    assert len(epk) == 156640
+    assert len(cpk) == 1168
+    assert len(epk) == 70752
     assert len(P1) == len(P2) == len(P3) == M
     assert len(P1[0]) == V and len(P1[0][0]) == V
     assert len(P2[0]) == V and len(P2[0][0]) == O_DIM
     assert len(P3[0]) == O_DIM and len(P3[0][0]) == O_DIM
+    assert cpk[SEED_PK_BYTES:] == encode_matrices(
+        P3,
+        O_DIM,
+        O_DIM,
+        triangular=True,
+    )
 
 
 def test_public_key_helpers_reject_short_inputs() -> None:

@@ -4,22 +4,7 @@ from core.field import inverse, multiply, subtract
 from core.matrix import Matrix, Vector
 
 
-def solve_linear_system(A: Matrix, b: Vector) -> Vector | None:
-    """Solve ``A*x = b`` by Gaussian elimination over GF(16).
-
-    When the system has multiple solutions, free variables are set to zero.
-
-    Args:
-        A: Non-empty coefficient matrix.
-        b: Right-hand side vector with one element per row in ``A``.
-
-    Returns:
-        One solution vector, or ``None`` if the system is inconsistent.
-
-    Raises:
-        ValueError: If ``A`` is empty or ragged, or ``b`` has the wrong
-            length.
-    """
+def _row_reduce(A: Matrix, b: Vector) -> tuple[Matrix, list[int], int]:
     if not A or not A[0]:
         raise ValueError("La matrice A ne doit pas etre vide")
 
@@ -74,6 +59,38 @@ def solve_linear_system(A: Matrix, b: Vector) -> Vector | None:
         pivot_row += 1
         if pivot_row == rows:
             break
+
+    return augmented, pivot_columns, cols
+
+
+def matrix_rank(A: Matrix) -> int:
+    """Return the rank of a non-empty matrix over GF(16).
+
+    Raises:
+        ValueError: If ``A`` is empty or ragged.
+    """
+    _, pivot_columns, _ = _row_reduce(A, [0] * len(A))
+    return len(pivot_columns)
+
+
+def solve_linear_system(A: Matrix, b: Vector) -> Vector | None:
+    """Solve ``A*x = b`` by Gaussian elimination over GF(16).
+
+    When the system has multiple solutions, free variables are set to zero.
+
+    Args:
+        A: Non-empty coefficient matrix.
+        b: Right-hand side vector with one element per row in ``A``.
+
+    Returns:
+        One solution vector, or ``None`` if the system is inconsistent.
+
+    Raises:
+        ValueError: If ``A`` is empty or ragged, or ``b`` has the wrong
+            length.
+    """
+    augmented, pivot_columns, cols = _row_reduce(A, b)
+    rows = len(A)
 
     for row_index in range(rows):
         if all(augmented[row_index][col] == 0 for col in range(cols)):

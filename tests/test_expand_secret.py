@@ -2,6 +2,7 @@
 
 import pytest
 
+from crypto.encoding import encode_matrices, encode_vector
 from crypto.hashing import derive_key_material
 from keys.expand_public import generate_P1_P2
 from keys.expand_secret import (
@@ -49,6 +50,22 @@ def test_linking_matrices_and_encoding_round_trip() -> None:
         for matrix in linking_matrices
         for row in matrix
     )
+    expected_encoded_L = b"".join(
+        encode_vector(
+            [
+                linking_matrices[matrix_index][row][col]
+                for matrix_index in range(M)
+            ]
+        )
+        for row in range(V)
+        for col in range(O_DIM)
+    )
+    assert encode_L(linking_matrices) == expected_encoded_L
+    assert encode_L(linking_matrices) == encode_matrices(
+        linking_matrices,
+        V,
+        O_DIM,
+    )
     assert decode_L(encode_L(linking_matrices)) == linking_matrices
 
 
@@ -58,7 +75,7 @@ def test_expand_and_parse_secret_key() -> None:
     esk = expand_secret_key(csk)
     seed_sk, O, P1, L = parse_esk(esk)
 
-    assert len(esk) == 155544
+    assert len(esk) == 69856
     assert seed_sk == csk
     assert len(O) == V and len(O[0]) == O_DIM
     assert len(P1) == M
