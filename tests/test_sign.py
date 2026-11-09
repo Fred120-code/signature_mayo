@@ -140,6 +140,7 @@ def test_sign_trace_is_complete_safe_and_does_not_change_signature(
     assert trace_dict["steps"][6]["dimensions"]["W"] == [K, M, V]
     assert trace_dict["steps"][6]["scope"] == "attempt"
     assert trace_dict["steps"][6]["attempt"] == 1
+    assert trace_dict["steps"][6]["operation"] == "sign"
 
     trace_text = repr(trace)
     assert seed_sk.hex() not in trace_text

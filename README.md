@@ -61,6 +61,25 @@ python -m pytest -v
 Les tests vérifient les opérations de corps fini et de matrices, la génération
 et l'expansion des clés, puis les chemins de signature et de vérification.
 
+## Interface Streamlit
+
+Installez les dépendances du projet, qui incluent Streamlit :
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Depuis la racine du dépôt, lancez le tableau de bord avec :
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Les vues de génération de clés, de signature et de vérification sont des
+espaces pédagogiques encore en développement. La section Analyse affiche les
+tailles dérivées des paramètres locaux; son chronométrage n’apparaît qu’après
+une exécution réelle demandée explicitement.
+
 ## Trace pédagogique de Sign
 
 `sign(esk, message)` conserve son comportement historique et renvoie seulement
@@ -84,6 +103,7 @@ class TraceStep:
     dimensions: Dimensions = field(default_factory=dict)
     status: str = "completed"
     attempt: int | None = None
+    operation: Literal["sign", "verify"] = "sign"
 
     @property
     def scope(self) -> str: ...
@@ -105,11 +125,16 @@ status="completed", attempt=None)` ajoute une étape et lui attribue le prochain
 numéro, commençant à 1. Les numéros restent globaux et dans l'ordre
 d'exécution. `attempt` vaut `None` pour les étapes communes à la signature ou
 le numéro (à partir de 1) pour les étapes d'une tentative; la propriété
-calculée `scope` vaut respectivement `"signature"` ou `"attempt"`.
+calculée `scope` vaut `"signature"` ou `"attempt"`. `operation` vaut
+`"sign"` par défaut, ce qui conserve la création historique des étapes Sign.
+Les étapes Verify sont marquées `"verify"` et ont la portée `"verification"`.
 `TraceStep` est immuable, mais ses dictionnaires `data` et `dimensions` restent
 des objets Python mutables. `SignTraceError`, utilisée pour une signature qui
 échoue lorsque le traçage est activé, est une sous-classe de `RuntimeError` qui
 conserve la trace partielle dans `error.trace`.
+`VerifyTrace` fournit la même interface `steps` / `add_step` / `to_dict` pour
+la vérification; ses étapes sont identifiées par `operation="verify"` et
+`scope="verification"`.
 
 ### Exemple réel exécuté
 
@@ -122,6 +147,9 @@ aléas et coefficients secrets ou dérivés de secrets ne sont pas inclus dans l
 trace.
 
 La trace complète expurgée de cette exécution est :
+
+Cet exemple historique présente les champs propres à Sign; la sérialisation
+actuelle ajoute aussi `"operation": "sign"` à chaque étape.
 
 ```json
 {
@@ -323,9 +351,10 @@ variables locales de la fonction de signature.
 
 ### Sérialisation JSON
 
-`SignTrace.to_dict()` convertit la trace dans son ordre global en dictionnaires,
-listes et valeurs scalaires compatibles JSON. Les dimensions, stockées sous
-forme de tuples dans les objets Python, sont converties en listes :
+`SignTrace.to_dict()` et `VerifyTrace.to_dict()` convertissent les traces en
+dictionnaires, listes et valeurs scalaires compatibles JSON. Les dimensions,
+stockées sous forme de tuples dans les objets Python, sont converties en listes.
+Chaque événement sérialisé contient également `operation` et `scope` :
 
 ```python
 import json
@@ -335,9 +364,47 @@ json_text = json.dumps(trace.to_dict(), ensure_ascii=False, indent=2)
 
 Le dictionnaire conserve le champ `attempt` et le `scope` calculé pour permettre
 de regrouper les événements par tentative sans perdre leur numéro ni leur ordre
-global. La sérialisation n'ajoute pas les valeurs cryptographiques omises de la
-trace. Il faut néanmoins maintenir le filtrage des données sensibles avant
-toute persistance ou transmission.
+global. Pour Verify, `operation` vaut `"verify"` et `scope` vaut
+`"verification"`. La sérialisation n'ajoute pas les valeurs cryptographiques
+omises de la trace. Il faut néanmoins maintenir le filtrage des données
+sensibles avant toute persistance ou transmission.
+
+## Trace pédagogique de Verify
+
+L'appel historique `verify(epk, message, signature)` renvoie toujours un entier :
+`0` si la signature est acceptée, `-1` sinon. Pour obtenir en plus la trace :
+
+```python
+result, trace = verify(
+    expanded_public_key,
+    message,
+    signature,
+    return_trace=True,
+)
+```
+
+Le résultat accompagné de la trace est disponible aussi pour les rejets
+anticipés reconnus. Les événements gardent leur numéro de séquence global;
+`operation="verify"` et `scope="verification"` les distinguent de ceux de Sign.
+Le chemin valide comprend, dans l'ordre, `message_normalized`,
+`public_key_parsed`, `signature_length_checked`, `signature_split`,
+`signature_vector_decoded`, `signature_blocks_partitioned`,
+`message_digest_computed`, `target_and_lambda_derived`, `emulsifier_loaded`,
+`quadratic_form_evaluated`, `lambda_contributions_added` et
+`verification_compared`. Un type d'argument invalide produit
+`input_rejected`; un rejet anticipé arrête la trace à l'étape concernée.
+Les événements de rejet portent un code stable dans `data["error_code"]` :
+`public_key_format_error`, `signature_length_error`,
+`signature_decode_error`, `derivation_error` ou `verification_mismatch`.
+Les rejets des types d'arguments ou d'un texte non encodable en UTF-8 utilisent
+respectivement `input_type_error` et `message_encoding_error`.
+
+La trace indique les dimensions et les tailles, mais n'enregistre pas le
+message, la clé publique, les octets de signature, le sel, les éléments de
+signature, les coefficients de matrices, ni les valeurs complètes de `t` ou de
+`Lambda`. Elle ne copie pas le texte des exceptions. Le digest et les aperçus
+numériques sont omis pour éviter de faciliter la confirmation de messages
+prévisibles dans une trace partagée.
 
 ## Paramètres et encodages conservés
 
