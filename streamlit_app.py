@@ -1,9 +1,13 @@
 """Streamlit dashboard for the local educational MAYO-like project."""
 
+import hashlib
 from time import perf_counter
 
 import streamlit as st
 
+from keys.expand_public import expand_public_key
+from keys.expand_secret import expand_secret_key
+from keys.keygen import generate_keypair
 from keys.parameters import (
     DIGEST_BYTES,
     K,
@@ -15,6 +19,8 @@ from keys.parameters import (
     SEED_SK_BYTES,
     V,
 )
+from scheme.sign import sign
+from scheme.trace import SignTrace, SignTraceError
 
 PAGES = (
     "Accueil",
@@ -23,6 +29,8 @@ PAGES = (
     "Vérification",
     "Analyse et performances",
 )
+KEYPAIR_STATE_KEY = "generated_keypair"
+SIGNATURE_STATE_KEY = "generated_signature"
 
 
 def profile_sizes() -> dict[str, int]:
@@ -99,14 +107,273 @@ def render_home() -> None:
         <div class="note-card">
             <strong>Une interface en construction</strong>
             <p>
-                Les vues dédiées aux clés, à Sign et à Verify sont préparées
-                pour une visualisation future. Elles ne présentent pas de
- résultats simulés.
+                La génération des clés et la signature utilisent le moteur
+                réel. La vue détaillée de Verify reste en développement;
+                aucun résultat cryptographique n’est simulé.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_key_generation() -> None:
+    """Generate and retain a real key pair only after explicit user action."""
+    st.title("Génération des clés")
+    st.caption(
+        "Création et expansion d’une paire avec les fonctions cryptographiques "
+        "du profil local."
+    )
+    st.info(
+        "Les clés secrètes sont conservées uniquement dans l’état de cette "
+        "session Streamlit. Elles ne sont jamais affichées."
+    )
+
+    st.subheader("Parcours de génération")
+    st.markdown(
+        """
+        1. **Génération des graines et construction compacte** — réalisées
+           ensemble par `generate_keypair()`.
+        2. **Expansion de la clé publique** — `expand_public_key(cpk)`.
+        3. **Expansion de la clé secrète** — `expand_secret_key(csk)`.
+        4. **Paire disponible** — les clés étendues restent en session pour
+           les prochaines étapes pédagogiques.
+        """
+    )
+
+    if st.button("Générer une paire de clés", type="primary"):
+        compact_public_key, compact_secret_key = generate_keypair()
+        expanded_public_key = expand_public_key(compact_public_key)
+        expanded_secret_key = expand_secret_key(compact_secret_key)
+        public_fingerprint = hashlib.sha256(compact_public_key).hexdigest()[:16]
+
+        st.session_state[KEYPAIR_STATE_KEY] = {
+            "compact_public_key": compact_public_key,
+            "compact_secret_key": compact_secret_key,
+            "expanded_public_key": expanded_public_key,
+            "expanded_secret_key": expanded_secret_key,
+            "public_fingerprint": public_fingerprint,
+        }
+
+    keypair = st.session_state.get(KEYPAIR_STATE_KEY)
+    if keypair is None:
+        st.caption(
+            "Aucune paire n’a encore été générée dans cette session. "
+            "Utilisez le bouton ci-dessus pour commencer."
+        )
+        return
+
+    st.success("Paire générée et clés étendues avec succès.")
+    st.markdown(
+        f"**Empreinte publique (SHA-256, préfixe)**  \n"
+        f"`{keypair['public_fingerprint']}`"
+    )
+
+    metrics = st.columns(2)
+    metrics[0].metric(
+        "Clé publique compacte",
+        f"{len(keypair['compact_public_key']):,} octets".replace(",", " "),
+    )
+    metrics[1].metric(
+        "Clé secrète compacte",
+        f"{len(keypair['compact_secret_key']):,} octets".replace(",", " "),
+    )
+    metrics = st.columns(2)
+    metrics[0].metric(
+        "Clé publique étendue",
+        f"{len(keypair['expanded_public_key']):,} octets".replace(",", " "),
+    )
+    metrics[1].metric(
+        "Clé secrète étendue",
+        f"{len(keypair['expanded_secret_key']):,} octets".replace(",", " "),
+    )
+
+    with st.expander("Paramètres utilisés"):
+        st.dataframe(
+            [
+                {"Paramètre": "Q", "Valeur": "16"},
+                {"Paramètre": "N", "Valeur": str(N)},
+                {"Paramètre": "M", "Valeur": str(M)},
+                {"Paramètre": "K", "Valeur": str(K)},
+                {"Paramètre": "V", "Valeur": str(V)},
+                {"Paramètre": "O_DIM", "Valeur": str(O_DIM)},
+                {
+                    "Paramètre": "Graine secrète",
+                    "Valeur": f"{SEED_SK_BYTES} octets (non affichée)",
+                },
+                {
+                    "Paramètre": "Graine publique",
+                    "Valeur": f"{SEED_PK_BYTES} octets",
+                },
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+
+
+def render_signature_trace(trace: SignTrace) -> None:
+    """Render actual Sign events in order without revealing value previews."""
+    st.subheader("Étapes réellement exécutées")
+    labels = {
+        "secret_key_prepared": "Préparation de la clé secrète étendue",
+        "message_digest": "Calcul du condensat du message",
+        "salt_generated": "Génération du sel",
+        "target_and_lambda_derived": "Dérivation de t et Lambda",
+        "emulsifier_loaded": "Chargement de la table E",
+        "attempt_values_generated": "Génération des valeurs de tentative",
+        "intermediate_matrices_built": "Construction de M_matrices et W",
+        "linear_system_built": "Construction du système linéaire",
+        "sample_solution": "Résolution du système",
+        "signature_encoded": "Encodage de la signature finale",
+        "signing_failed": "Limite de tentatives atteinte",
+    }
+
+    for step in trace.steps:
+        title = labels.get(step.name, "Étape de signature")
+        if step.attempt is not None:
+            title = f"Tentative {step.attempt} — {title}"
+        with st.expander(f"{step.number}. {title}", expanded=False):
+            st.write(step.description)
+            st.caption(f"Résultat : {step.status}")
+
+            safe_data = {
+                key: value
+                for key, value in step.data.items()
+                if key not in {
+                    "digest_preview_hex",
+                    "salt_hex",
+                    "t_preview",
+                    "lambda_preview",
+                }
+            }
+            if safe_data:
+                st.json(safe_data)
+            if step.dimensions:
+                st.write("Dimensions")
+                st.json(
+                    {
+                        name: list(shape)
+                        for name, shape in step.dimensions.items()
+                    }
+                )
+
+
+def render_signature() -> None:
+    """Sign the submitted message with the current session's real secret key."""
+    st.title("Signature")
+    st.caption(
+        "Le message est signé par le moteur local avec la clé secrète étendue "
+        "de la paire conservée dans cette session."
+    )
+
+    keypair = st.session_state.get(KEYPAIR_STATE_KEY)
+    if keypair is None:
+        st.warning(
+            "Aucune paire de clés n’est disponible. Générez d’abord une paire "
+            "dans la section « Génération des clés »."
+        )
+        return
+
+    st.text_area(
+        "Message à signer",
+        key="signature_message_input",
+        help="Le moteur accepte aussi un message vide.",
+    )
+    if st.button("Signer le message", type="primary"):
+        message = st.session_state["signature_message_input"]
+        started = perf_counter()
+        try:
+            signature, trace = sign(
+                keypair["expanded_secret_key"],
+                message,
+                return_trace=True,
+            )
+        except SignTraceError as error:
+            elapsed = perf_counter() - started
+            st.session_state[SIGNATURE_STATE_KEY] = {
+                "message": message,
+                "signature": None,
+                "trace": error.trace,
+                "elapsed_seconds": elapsed,
+                "error_kind": "retry_limit",
+            }
+        except ValueError:
+            elapsed = perf_counter() - started
+            st.session_state[SIGNATURE_STATE_KEY] = {
+                "message": message,
+                "signature": None,
+                "trace": None,
+                "elapsed_seconds": elapsed,
+                "error_kind": "invalid_key_or_input",
+            }
+        except Exception:
+            elapsed = perf_counter() - started
+            st.session_state[SIGNATURE_STATE_KEY] = {
+                "message": message,
+                "signature": None,
+                "trace": None,
+                "elapsed_seconds": elapsed,
+                "error_kind": "internal_error",
+            }
+        else:
+            elapsed = perf_counter() - started
+            st.session_state[SIGNATURE_STATE_KEY] = {
+                "message": message,
+                "signature": signature,
+                "trace": trace,
+                "elapsed_seconds": elapsed,
+                "error_kind": None,
+            }
+
+    result = st.session_state.get(SIGNATURE_STATE_KEY)
+    if result is None:
+        st.caption(
+            "Saisissez un message puis lancez la signature. Aucun calcul "
+            "n’est effectué avant votre action."
+        )
+        return
+
+    st.markdown("#### Message soumis")
+    st.code(result["message"] if result["message"] else "(message vide)")
+    st.metric("Temps réel de signature", f"{result['elapsed_seconds']:.3f} s")
+
+    if result["error_kind"] == "retry_limit":
+        st.error(
+            "La signature a échoué : aucune solution n’a été trouvée dans la "
+            "limite de tentatives du moteur."
+        )
+        if result["trace"] is not None:
+            render_signature_trace(result["trace"])
+        return
+    if result["error_kind"] == "invalid_key_or_input":
+        st.error(
+            "La signature n’a pas pu être calculée : la clé de session ou "
+            "l’entrée n’est pas exploitable."
+        )
+        return
+    if result["error_kind"] == "internal_error":
+        st.error(
+            "Une erreur interne a interrompu la signature. Aucun détail "
+            "technique ni secret n’est affiché."
+        )
+        return
+
+    signature = result["signature"]
+    if signature is None:
+        st.error("Aucune signature n’a été produite.")
+        return
+
+    st.success("Signature produite avec succès.")
+    st.metric("Taille de la signature", f"{len(signature)} octets")
+    show_hex = st.checkbox(
+        "Afficher la signature en hexadécimal",
+        value=False,
+        key="show_signature_hex",
+    )
+    if show_hex:
+        st.code(signature.hex(), language="text")
+    if result["trace"] is not None:
+        render_signature_trace(result["trace"])
 
 
 def render_development_page(title: str, subtitle: str) -> None:
@@ -277,15 +544,9 @@ def main() -> None:
     if selected_page == "Accueil":
         render_home()
     elif selected_page == "Génération des clés":
-        render_development_page(
-            "Génération des clés",
-            "Découvrir la création et l’expansion des clés du profil local.",
-        )
+        render_key_generation()
     elif selected_page == "Signature":
-        render_development_page(
-            "Signature",
-            "Explorer les étapes de production d’une signature.",
-        )
+        render_signature()
     elif selected_page == "Vérification":
         render_development_page(
             "Vérification",

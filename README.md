@@ -75,10 +75,13 @@ Depuis la racine du dépôt, lancez le tableau de bord avec :
 streamlit run streamlit_app.py
 ```
 
-Les vues de génération de clés, de signature et de vérification sont des
-espaces pédagogiques encore en développement. La section Analyse affiche les
-tailles dérivées des paramètres locaux; son chronométrage n’apparaît qu’après
-une exécution réelle demandée explicitement.
+Les vues Génération des clés et Signature appellent le moteur local uniquement
+sur action explicite et conservent leurs résultats dans l’état de la session
+Streamlit sans afficher de clé secrète. La signature affiche sa trace
+pédagogique et garde son hexadécimal masqué par défaut. La vue détaillée de
+vérification reste en développement. La section Analyse affiche les tailles
+dérivées des paramètres locaux; son chronométrage n’apparaît qu’après une
+exécution réelle demandée explicitement.
 
 ## Trace pédagogique de Sign
 
