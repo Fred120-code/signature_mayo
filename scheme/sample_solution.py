@@ -1,6 +1,6 @@
 """MAYO sampling strategy for solving a linear system over GF(16)."""
 
-from core.linear_algebra import solve_linear_system
+from core.linear_algebra import matrix_rank, solve_linear_system
 from core.matrix import (
     Matrix,
     Vector,
@@ -23,8 +23,12 @@ def sample_solution(A: Matrix, y: Vector, r: Vector) -> Vector | None:
         r: Random vector containing values for free-variable components.
 
     Returns:
-        A solution vector, or ``None`` if the system is inconsistent.
+        A solution vector, or ``None`` if the system is inconsistent or does
+        not have full row rank.
     """
+    if matrix_rank(A) != len(A):
+        return None
+
     Ar = matrix_vector_multiply(A, r)
     x0 = solve_linear_system(A, vector_subtract(y, Ar))
 

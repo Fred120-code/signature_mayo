@@ -37,6 +37,14 @@ def test_sample_solution_solves_and_rejects_inconsistent_systems() -> None:
     assert sample_solution([[1, 1], [1, 1]], [1, 2], [0, 0]) is None
 
 
+def test_sample_solution_rejects_compatible_rank_deficient_system() -> None:
+    """SampleSolution rejects systems whose rank is below their row count."""
+    matrix = [[1, 1], [2, 2]]
+    target = [1, 2]
+
+    assert sample_solution(matrix, target, [0, 0]) is None
+
+
 def test_signature_uses_existing_encoding_and_length() -> None:
     """Signing yields the MAYO1 321-byte vector-plus-salt format."""
     seed_sk = bytes(range(SEED_SK_BYTES))

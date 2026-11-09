@@ -2,7 +2,7 @@
 
 import pytest
 
-from core.linear_algebra import solve_linear_system
+from core.linear_algebra import matrix_rank, solve_linear_system
 from core.matrix import (
     matrix_add,
     matrix_multiply,
@@ -42,6 +42,12 @@ def test_linear_system_solver_and_inconsistent_system() -> None:
     assert solution is not None
     assert matrix_vector_multiply(coefficients, solution) == target
     assert solve_linear_system([[1, 1], [1, 1]], [1, 2]) is None
+
+
+def test_matrix_rank_over_gf16() -> None:
+    """Matrix rank counts independent rows over GF(16)."""
+    assert matrix_rank([[1, 0], [0, 1]]) == 2
+    assert matrix_rank([[1, 1], [2, 2]]) == 1
 
 
 def test_matrix_operations_reject_invalid_dimensions() -> None:

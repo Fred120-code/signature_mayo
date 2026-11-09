@@ -20,12 +20,20 @@ def verify(epk: bytes, message: bytes | str, sig: bytes) -> int:
     Returns:
         ``0`` if valid, otherwise ``-1``.
     """
+    if not isinstance(epk, bytes) or not isinstance(sig, bytes):
+        return -1
+    if not isinstance(message, (bytes, str)):
+        return -1
+
     if isinstance(message, str):
-        message = message.encode("utf-8")
+        try:
+            message = message.encode("utf-8")
+        except UnicodeEncodeError:
+            return -1
 
     try:
         P1, P2, P3 = parse_epk(epk)
-    except Exception:
+    except ValueError:
         return -1
 
     expected_s_bytes = (K * N + 1) // 2
@@ -37,7 +45,7 @@ def verify(epk: bytes, message: bytes | str, sig: bytes) -> int:
 
     try:
         s_elements = decode_vector(K * N, s_bytes)
-    except Exception:
+    except ValueError:
         return -1
 
     s_blocks = [
@@ -48,7 +56,7 @@ def verify(epk: bytes, message: bytes | str, sig: bytes) -> int:
     m_digest = shake256(message, DIGEST_BYTES)
     try:
         t, Lambda = derive_t_and_lambda(m_digest, salt, M, N)
-    except Exception:
+    except ValueError:
         return -1
 
     E = get_E()

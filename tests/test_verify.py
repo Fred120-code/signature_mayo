@@ -1,6 +1,10 @@
 """Tests for independent MAYO signature verification."""
 
+from typing import cast
+
 import pytest
+
+import scheme.verify as verify_module
 
 from crypto.hashing import derive_key_material
 from keys.expand_public import expand_public_key, generate_P1_P2
@@ -46,6 +50,7 @@ def test_valid_signature_is_accepted(
 ) -> None:
     """Verify accepts a signature generated for the original message."""
     epk, _, message, signature = signed_message
+    assert len(signature) == 321
     assert verify(epk, message, signature) == 0
 
 
@@ -67,6 +72,16 @@ def test_modified_signature_is_rejected(
     assert verify(epk, message, bytes(damaged)) == -1
 
 
+def test_modified_salt_is_rejected(
+    signed_message: tuple[bytes, bytes, bytes, bytes],
+) -> None:
+    """Verify rejects a signature with a modified salt."""
+    epk, _, message, signature = signed_message
+    damaged = bytearray(signature)
+    damaged[-1] ^= 1
+    assert verify(epk, message, bytes(damaged)) == -1
+
+
 def test_other_public_key_is_rejected(
     signed_message: tuple[bytes, bytes, bytes, bytes],
 ) -> None:
@@ -80,7 +95,56 @@ def test_other_public_key_is_rejected(
 def test_malformed_signature_and_key_are_rejected(
     signed_message: tuple[bytes, bytes, bytes, bytes],
 ) -> None:
-    """Malformed inputs follow Verify's existing invalid-signature result."""
-    epk, _, message, _ = signed_message
+    """Malformed lengths and key encodings return the invalid-signature result."""
+    epk, _, message, signature = signed_message
     assert verify(epk, message, b"") == -1
     assert verify(b"", message, b"bad") == -1
+    assert verify(epk, message, signature[:-1]) == -1
+    assert verify(epk, message, signature + b"\x00") == -1
+    assert verify(epk + b"\x00", message, signature) == -1
+
+
+@pytest.mark.parametrize(
+    ("epk", "message", "signature"),
+    [
+        (None, b"message", b"signature"),
+        (b"epk", None, b"signature"),
+        (b"epk", b"message", None),
+        (b"epk", 123, b"signature"),
+        (bytearray(b"epk"), b"message", b"signature"),
+    ],
+)
+def test_malformed_argument_types_are_rejected(
+    epk: object,
+    message: object,
+    signature: object,
+) -> None:
+    """Verify rejects inputs that do not match its public argument types."""
+    assert verify(
+        cast(bytes, epk),
+        cast(bytes | str, message),
+        cast(bytes, signature),
+    ) == -1
+
+
+def test_unencodable_message_is_rejected(
+    signed_message: tuple[bytes, bytes, bytes, bytes],
+) -> None:
+    """Verify returns the invalid-signature result for invalid UTF-8 text."""
+    epk, _, _, signature = signed_message
+    assert verify(epk, "\ud800", signature) == -1
+
+
+def test_unexpected_internal_error_is_not_swallowed(
+    signed_message: tuple[bytes, bytes, bytes, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected failures in public-key parsing remain visible to callers."""
+    epk, _, message, signature = signed_message
+
+    def raise_internal_error(_: bytes) -> None:
+        raise RuntimeError("unexpected parser failure")
+
+    monkeypatch.setattr(verify_module, "parse_epk", raise_internal_error)
+    with pytest.raises(RuntimeError, match="unexpected parser failure"):
+        verify(epk, message, signature)
